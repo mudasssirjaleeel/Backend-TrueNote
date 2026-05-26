@@ -1,13 +1,18 @@
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
 const prisma = require("../config/prisma");
 const { getUserPermissions } = require("../utils/permissions");
-
 const {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
 } = require("../utils/jwt");
 const asyncHandler = require("../utils/asyncHandler");
+const {
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
+  sendOrderConfirmationEmail,
+} = require("../services/emailService");
 
 // Helper — save refresh token to DB
 const saveRefreshToken = async (userId, token) => {
@@ -49,6 +54,11 @@ exports.register = asyncHandler(async (req, res) => {
   const accessToken = generateAccessToken({ id: user.id, role: user.role });
   const refreshToken = generateRefreshToken({ id: user.id });
   await saveRefreshToken(user.id, refreshToken);
+
+  // Send welcome email
+  if (user.email) {
+    await sendWelcomeEmail({ to: user.email, name: user.name });
+  }
 
   res.status(201).json({
     user,
@@ -276,23 +286,125 @@ exports.changePassword = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────
+//  POST /api/auth/forgot-password (NEW)
+// ─────────────────────────────────────────
+exports.forgotPassword = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  const user = await prisma.user.findUnique({ where: { email } });
+
+  // Always return success — never reveal if email exists or not
+  if (!user) {
+    return res.status(200).json({
+      success: true,
+      message: "If that email exists, a reset link has been sent.",
+    });
+  }
+
+  // Generate a secure random token
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  const resetTokenHash = crypto
+    .createHash("sha256")
+    .update(resetToken)
+    .digest("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  // Delete any existing reset tokens for this user
+  await prisma.passwordResetToken.deleteMany({ where: { userId: user.id } });
+
+  // Save new hashed token to DB
+  await prisma.passwordResetToken.create({
+    data: { token: resetTokenHash, userId: user.id, expiresAt },
+  });
+
+  // Build reset URL (raw token goes in the URL, not the hash)
+  const resetUrl = `${process.env.CLIENT_URL || "http://localhost:3000"}/reset-password?token=${resetToken}`;
+
+  // Send email
+  await sendPasswordResetEmail({
+    to: user.email,
+    name: user.name,
+    resetUrl,
+  });
+
+  res.status(200).json({
+    success: true,
+    message: "If that email exists, a reset link has been sent.",
+  });
+});
+
+// ─────────────────────────────────────────
+//  POST /api/auth/reset-password (NEW)
+// ─────────────────────────────────────────
+exports.resetPassword = asyncHandler(async (req, res) => {
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({
+      error: { code: "MISSING_FIELDS", message: "Token and new password are required." },
+    });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({
+      error: { code: "WEAK_PASSWORD", message: "Password must be at least 6 characters." },
+    });
+  }
+
+  // Hash the incoming token to compare with what's in the DB
+  const tokenHash = crypto
+    .createHash("sha256")
+    .update(token)
+    .digest("hex");
+
+  const record = await prisma.passwordResetToken.findUnique({
+    where: { token: tokenHash },
+  });
+
+  if (!record || record.expiresAt < new Date()) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_TOKEN",
+        message: "Reset link is invalid or has expired. Please request a new one.",
+      },
+    });
+  }
+
+  // Update the user's password
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({
+    where: { id: record.userId },
+    data: { passwordHash },
+  });
+
+  // Delete the used reset token
+  await prisma.passwordResetToken.delete({ where: { token: tokenHash } });
+
+  // Also invalidate all refresh tokens (force re-login everywhere)
+  await prisma.refreshToken.deleteMany({ where: { userId: record.userId } });
+
+  res.status(200).json({
+    success: true,
+    message: "Password has been reset successfully. Please log in with your new password.",
+  });
+});
+
+// ─────────────────────────────────────────
 //  POST /api/auth/otp/request
 // ─────────────────────────────────────────
 exports.requestOtp = asyncHandler(async (req, res) => {
   const { phone } = req.body;
 
-  // Check if user exists with this phone
   let user = await prisma.user.findUnique({ where: { phone } });
 
   if (!user) {
-    // Auto-create new user with phone only
     const timestamp = Date.now().toString().slice(-6);
     user = await prisma.user.create({
       data: {
         name: `User_${timestamp}`,
         phone,
-        email: null, // Email is optional now
-        passwordHash: "", // No password for phone-only users
+        email: null,
+        passwordHash: "",
       },
       select: {
         id: true,
@@ -305,30 +417,21 @@ exports.requestOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  // Generate 6-digit OTP
   const { generateOtp } = require("../utils/otp");
   const otpCode = generateOtp();
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-  // Delete any existing OTP for this phone
   await prisma.otp.deleteMany({ where: { phone } });
-
-  // Save OTP to database
   await prisma.otp.create({
-    data: {
-      phone,
-      otp: otpCode,
-      expiresAt,
-    },
+    data: { phone, otp: otpCode, expiresAt },
   });
 
   // TODO: Send OTP via SMS service (Twilio, etc.)
-  console.log(`OTP for ${phone}: ${otpCode}`); // For development
+  console.log(`OTP for ${phone}: ${otpCode}`);
 
   res.status(200).json({
     success: true,
     message: "OTP sent successfully",
-    // Remove in production
     devOtp: process.env.NODE_ENV === "development" ? otpCode : undefined,
   });
 });
@@ -339,7 +442,6 @@ exports.requestOtp = asyncHandler(async (req, res) => {
 exports.verifyOtp = asyncHandler(async (req, res) => {
   const { phone, otp } = req.body;
 
-  // Find valid OTP
   const otpRecord = await prisma.otp.findFirst({
     where: {
       phone,
@@ -357,7 +459,6 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  // Get user
   const user = await prisma.user.findUnique({ where: { phone } });
 
   if (!user) {
@@ -369,10 +470,8 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
     });
   }
 
-  // Delete used OTP
   await prisma.otp.delete({ where: { id: otpRecord.id } });
 
-  // Generate tokens
   const accessToken = generateAccessToken({ id: user.id, role: user.role });
   const refreshToken = generateRefreshToken({ id: user.id });
   await saveRefreshToken(user.id, refreshToken);
@@ -386,53 +485,33 @@ exports.verifyOtp = asyncHandler(async (req, res) => {
   });
 });
 
-// Delete User (Admin only)
+// ─────────────────────────────────────────
+//  DELETE /api/auth/user/:id  (Admin only)
+// ─────────────────────────────────────────
 exports.deleteUser = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
-  console.log("Attempting to delete user:", id);
-
-  // Find the user
-  const user = await prisma.user.findUnique({
-    where: { id },
-  });
+  const user = await prisma.user.findUnique({ where: { id } });
 
   if (!user) {
-    console.log("User not found:", id);
     return res.status(404).json({
       error: { code: "NOT_FOUND", message: "User not found" },
     });
   }
 
-  console.log("User found:", user.email, "Role:", user.role);
-
-  // Prevent deleting admin accounts
   if (user.role === "admin") {
-    console.log("Blocked - cannot delete admin");
     return res.status(403).json({
       error: { code: "FORBIDDEN", message: "Cannot delete admin accounts" },
     });
   }
 
-  // Check if user has staff record
-  const staffRecord = await prisma.staff.findUnique({
-    where: { userId: id },
-  });
-
+  const staffRecord = await prisma.staff.findUnique({ where: { userId: id } });
   if (staffRecord) {
-    console.log("Deleting staff record first");
-    await prisma.staff.delete({
-      where: { id: staffRecord.id },
-    });
+    await prisma.staff.delete({ where: { id: staffRecord.id } });
   }
 
-  // Delete the user
-  console.log("Deleting user...");
-  await prisma.user.delete({
-    where: { id },
-  });
+  await prisma.user.delete({ where: { id } });
 
-  console.log("User deleted successfully");
   res.status(200).json({
     success: true,
     message: "User has been deleted successfully",
