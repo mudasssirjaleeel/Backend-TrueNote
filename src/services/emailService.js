@@ -3,11 +3,10 @@ const nodemailer = require("nodemailer");
 // Create transporter
 let transporter = null;
 
-// Initialize email transporter (for development with Ethereal)
+// Initialize email transporter
 const initEmailTransporter = async () => {
   if (transporter) return transporter;
 
-  // Check if we have SMTP config in .env
   if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
     // Production - Use real SMTP
     transporter = nodemailer.createTransport({
@@ -23,7 +22,6 @@ const initEmailTransporter = async () => {
   } else {
     // Development - Use Ethereal (fake SMTP for testing)
     const testAccount = await nodemailer.createTestAccount();
-
     transporter = nodemailer.createTransport({
       host: "smtp.ethereal.email",
       port: 587,
@@ -33,7 +31,6 @@ const initEmailTransporter = async () => {
         pass: testAccount.pass,
       },
     });
-
     console.log("📧 Email transporter initialized (Ethereal test mode)");
     console.log(`   Test email preview: https://ethereal.email/messages`);
   }
@@ -41,7 +38,9 @@ const initEmailTransporter = async () => {
   return transporter;
 };
 
-// Send staff invitation email
+// ─────────────────────────────────────────
+//  Send Staff Invitation Email
+// ─────────────────────────────────────────
 const sendStaffInvitationEmail = async ({
   to,
   name,
@@ -105,20 +104,19 @@ const sendStaffInvitationEmail = async ({
     });
 
     console.log(`✅ Staff invitation email sent to ${to}`);
-
-    // Log preview URL for Ethereal (development)
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     }
-
     return true;
   } catch (error) {
-    console.error("❌ Failed to send email:", error.message);
+    console.error("❌ Failed to send staff invitation email:", error.message);
     return false;
   }
 };
 
-// Send test email
+// ─────────────────────────────────────────
+//  Send Test Email
+// ─────────────────────────────────────────
 const sendTestEmail = async (to) => {
   try {
     const transporter = await initEmailTransporter();
@@ -139,12 +137,10 @@ const sendTestEmail = async (to) => {
     });
 
     console.log(`✅ Test email sent to ${to}`);
-
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
       return { success: true, previewUrl: nodemailer.getTestMessageUrl(info) };
     }
-
     return { success: true };
   } catch (error) {
     console.error("❌ Failed to send test email:", error.message);
@@ -152,7 +148,105 @@ const sendTestEmail = async (to) => {
   }
 };
 
-// Send order confirmation email
+// ─────────────────────────────────────────
+//  Send Welcome Email (NEW)
+// ─────────────────────────────────────────
+const sendWelcomeEmail = async ({ to, name }) => {
+  try {
+    const transporter = await initEmailTransporter();
+
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"Truenote Coffee" <noreply@truenote.com>',
+      to: to,
+      subject: "Welcome to Truenote Coffee! ☕",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #d97706; margin: 0;">Welcome to Truenote Coffee</h1>
+            <p style="color: #666; margin: 5px 0 0;">Freshly roasted, delivered to your door</p>
+          </div>
+
+          <p>Hi ${name},</p>
+          <p>Welcome to Truenote Coffee! We're so excited to have you on board. ☕</p>
+          <p>You can now browse our coffee beans, place orders, and manage your subscriptions.</p>
+
+          <a href="${process.env.CLIENT_URL || "http://localhost:3000"}"
+             style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+            Start Shopping
+          </a>
+
+          <hr style="margin: 30px 0 20px;">
+          <p style="color: #666; font-size: 12px; text-align: center;">
+            Truenote Coffee — Freshly roasted, ethically sourced.<br>
+            Questions? Contact us at support@truenote.com
+          </p>
+        </div>
+      `,
+    });
+
+    console.log(`✅ Welcome email sent to ${to}`);
+    if (!process.env.SMTP_HOST) {
+      console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+    }
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to send welcome email:", error.message);
+    return false;
+  }
+};
+
+// ─────────────────────────────────────────
+//  Send Password Reset Email (NEW)
+// ─────────────────────────────────────────
+const sendPasswordResetEmail = async ({ to, name, resetUrl }) => {
+  try {
+    const transporter = await initEmailTransporter();
+
+    const info = await transporter.sendMail({
+      from: process.env.SMTP_FROM || '"Truenote Coffee" <noreply@truenote.com>',
+      to: to,
+      subject: "Reset Your Password — Truenote Coffee",
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #d97706; margin: 0;">Truenote Coffee</h1>
+            <p style="color: #666; margin: 5px 0 0;">Password Reset Request</p>
+          </div>
+
+          <p>Hi ${name},</p>
+          <p>We received a request to reset your password. Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+
+          <a href="${resetUrl}"
+             style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+            Reset My Password
+          </a>
+
+          <p style="color: #999; font-size: 13px;">
+            If you didn't request a password reset, you can safely ignore this email. Your password won't change.
+          </p>
+
+          <hr style="margin: 30px 0 20px;">
+          <p style="color: #666; font-size: 12px; text-align: center;">
+            Truenote Coffee — support@truenote.com
+          </p>
+        </div>
+      `,
+    });
+
+    console.log(`✅ Password reset email sent to ${to}`);
+    if (!process.env.SMTP_HOST) {
+      console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
+    }
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to send password reset email:", error.message);
+    return false;
+  }
+};
+
+// ─────────────────────────────────────────
+//  Send Order Confirmation Email
+// ─────────────────────────────────────────
 const sendOrderConfirmationEmail = async ({ to, name, orderNumber, total }) => {
   try {
     const transporter = await initEmailTransporter();
@@ -160,33 +254,55 @@ const sendOrderConfirmationEmail = async ({ to, name, orderNumber, total }) => {
     const info = await transporter.sendMail({
       from: process.env.SMTP_FROM || '"Truenote Coffee" <orders@truenote.com>',
       to: to,
-      subject: `Order Confirmed #${orderNumber}`,
+      subject: `Order Received #${orderNumber} — Truenote Coffee`,
       html: `
-        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-          <h2 style="color: #d97706;">Order Confirmed!</h2>
-          <p>Hi ${name},</p>
-          <p>Your order <strong>#${orderNumber}</strong> has been confirmed and is being prepared.</p>
-          <p><strong>Total: $${total.toFixed(2)}</strong></p>
-          <p>Thank you for choosing Truenote Coffee!</p>
-          <hr style="margin: 20px 0;">
-          <p style="color: #666; font-size: 12px;">Truenote Coffee - Freshly roasted, delivered to your door.</p>
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h1 style="color: #d97706; margin: 0;">Truenote Coffee</h1>
+            <p style="color: #666; margin: 5px 0 0;">Freshly roasted coffee delivered to your door</p>
+          </div>
+
+          <div style="text-align: center; padding: 20px; background-color: #d9770610; border-radius: 8px; margin-bottom: 20px;">
+            <h2 style="color: #d97706; margin: 0;">Order Received! ☕</h2>
+            <p style="color: #333; margin: 10px 0 0;">Thank you for your order. We've received it and it's being reviewed.</p>
+          </div>
+
+          <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 5px 0;"><strong>Order Number:</strong> #${orderNumber}</p>
+            <p style="margin: 5px 0;"><strong>Total Amount:</strong> $${total.toFixed(2)}</p>
+            <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: #d97706;">Pending Confirmation</span></p>
+          </div>
+
+          <p>You'll receive another email once your order is confirmed and being prepared.</p>
+
+          <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/order_history"
+             style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+            View My Orders
+          </a>
+
+          <hr style="margin: 30px 0 20px;">
+          <p style="color: #666; font-size: 12px; text-align: center;">
+            Truenote Coffee — Freshly roasted, ethically sourced.<br>
+            Questions? Contact us at support@truenote.com
+          </p>
         </div>
       `,
     });
 
     console.log(`✅ Order confirmation email sent to ${to}`);
-
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     }
-
     return true;
   } catch (error) {
-    console.error("❌ Failed to send order email:", error.message);
+    console.error("❌ Failed to send order confirmation email:", error.message);
     return false;
   }
 };
 
+// ─────────────────────────────────────────
+//  Send Order Status Email
+// ─────────────────────────────────────────
 const sendOrderStatusEmail = async ({
   to,
   name,
@@ -259,7 +375,7 @@ const sendOrderStatusEmail = async ({
             <p style="margin: 5px 0;"><strong>Status:</strong> <span style="color: ${statusInfo.color};">${statusInfo.title}</span></p>
           </div>
           
-          <a href="${process.env.CLIENT_URL}/order_history" 
+          <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/order_history" 
              style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
             View Order Details
           </a>
@@ -274,11 +390,9 @@ const sendOrderStatusEmail = async ({
     });
 
     console.log(`✅ Order status email sent to ${to} for status: ${status}`);
-
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     }
-
     return true;
   } catch (error) {
     console.error("❌ Failed to send order status email:", error.message);
@@ -286,7 +400,9 @@ const sendOrderStatusEmail = async ({
   }
 };
 
-// Send subscription renewal email
+// ─────────────────────────────────────────
+//  Send Subscription Renewal Email
+// ─────────────────────────────────────────
 const sendSubscriptionRenewalEmail = async ({
   to,
   name,
@@ -321,7 +437,7 @@ const sendSubscriptionRenewalEmail = async ({
             <p style="margin: 5px 0;"><strong>Amount Charged:</strong> $${price.toFixed(2)}</p>
           </div>
           
-          <a href="${process.env.CLIENT_URL}/my_subscription" 
+          <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/my_subscription" 
              style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
             Manage Subscription
           </a>
@@ -336,22 +452,19 @@ const sendSubscriptionRenewalEmail = async ({
     });
 
     console.log(`✅ Subscription renewal email sent to ${to}`);
-
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     }
-
     return true;
   } catch (error) {
-    console.error(
-      "❌ Failed to send subscription renewal email:",
-      error.message,
-    );
+    console.error("❌ Failed to send subscription renewal email:", error.message);
     return false;
   }
 };
 
-// Send subscription payment failed email
+// ─────────────────────────────────────────
+//  Send Subscription Payment Failed Email
+// ─────────────────────────────────────────
 const sendSubscriptionPaymentFailedEmail = async ({
   to,
   name,
@@ -384,7 +497,7 @@ const sendSubscriptionPaymentFailedEmail = async ({
           
           <p>Please update your payment method to continue receiving your coffee deliveries.</p>
           
-          <a href="${process.env.CLIENT_URL}/my_subscription" 
+          <a href="${process.env.CLIENT_URL || "http://localhost:3000"}/my_subscription" 
              style="display: block; background-color: #d97706; color: white; text-align: center; padding: 12px; text-decoration: none; border-radius: 6px; margin: 20px 0;">
             Update Payment Method
           </a>
@@ -399,11 +512,9 @@ const sendSubscriptionPaymentFailedEmail = async ({
     });
 
     console.log(`✅ Subscription payment failed email sent to ${to}`);
-
     if (!process.env.SMTP_HOST) {
       console.log(`   📧 Preview URL: ${nodemailer.getTestMessageUrl(info)}`);
     }
-
     return true;
   } catch (error) {
     console.error("❌ Failed to send payment failed email:", error.message);
@@ -415,6 +526,8 @@ module.exports = {
   initEmailTransporter,
   sendStaffInvitationEmail,
   sendTestEmail,
+  sendWelcomeEmail,
+  sendPasswordResetEmail,
   sendOrderConfirmationEmail,
   sendOrderStatusEmail,
   sendSubscriptionRenewalEmail,
