@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "darwin-arm64"]
 }
 
 datasource db {
@@ -14,7 +15,7 @@ datasource db {
 enum Role {
   user
   admin
-  staff 
+  staff
 }
 
 enum GrindOption {
@@ -50,7 +51,6 @@ enum OrderStatus {
   cancelled
 }
 
-
 enum SubscriptionPlan {
   weekly
   biweekly
@@ -63,15 +63,12 @@ enum SubscriptionStatus {
   cancelled
 }
 
-
-
 enum ContactStatus {
   unread
   read
   replied
   archived
 }
-
 
 enum StaffRole {
   super_admin
@@ -82,62 +79,37 @@ enum StaffRole {
 }
 
 enum Permission {
-  // Dashboard
   view_dashboard
-  
-  // Orders
   view_orders
   update_order_status
   cancel_order
   view_all_orders
-  
-  // KDS
   view_kds
   advance_order_status
   recall_order
-  
-  // Menu & Products
   view_menu
   edit_menu
   toggle_availability
-  
-  // Beans
   view_beans
   edit_beans
-  
-  // Categories
   view_categories
   edit_categories
-  
-  // Banners
   view_banners
   edit_banners
-  
-  // Subscriptions
   view_subscriptions
   manage_subscriptions
-  
-  // Customers
   view_customers
   manage_customers
   view_loyalty
   adjust_loyalty_points
-  
-  // Reports
   view_reports
   export_reports
-  
-  // Staff
   view_staff
   invite_staff
   manage_staff_roles
-  
-  // Settings
   view_settings
   edit_settings
 }
-
-
 
 // ─────────────────────────────────────────
 //  USER
@@ -146,45 +118,40 @@ enum Permission {
 model User {
   id           String   @id @default(uuid())
   name         String
-  email        String?   @unique
-  phone        String?   @unique
-  avatarUrl    String?   @map("avatar_url")
-  passwordHash String?   @map("password_hash")
+  email        String?  @unique
+  phone        String?  @unique
+  avatarUrl    String?  @map("avatar_url")
+  passwordHash String?  @map("password_hash")
   role         Role     @default(user)
   createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt      @map("updated_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  refreshTokens RefreshToken[]
-  cartItems     CartItem[]
-  orders        Order[]
-  wishlistItems WishlistItem[] 
-  addresses     Address[]
-
-  loyaltyPoints LoyaltyPoint[]
-  redemptions   Redemption[]
-  userEarnActions UserEarnAction[]
-
-  subscriptions Subscription[]
-
-  staffRecord   Staff?   @relation("staffUser")
-  invitedStaff  Staff[]  @relation("staffInviter")
-
-  deviceTokens   DeviceToken[]
-  notifications  NotificationLog[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+  cartItems           CartItem[]
+  orders              Order[]
+  wishlistItems       WishlistItem[]
+  addresses           Address[]
+  loyaltyPoints       LoyaltyPoint[]
+  redemptions         Redemption[]
+  userEarnActions     UserEarnAction[]
+  subscriptions       Subscription[]
+  staffRecord         Staff?  @relation("staffUser")
+  invitedStaff        Staff[] @relation("staffInviter")
+  deviceTokens        DeviceToken[]
+  notifications       NotificationLog[]
 
   @@map("users")
 }
-
 
 model RolePermission {
   id         String     @id @default(uuid())
   role       StaffRole
   permission Permission
-  
+
   @@unique([role, permission])
   @@map("role_permissions")
 }
-
 
 model RefreshToken {
   id        String   @id @default(uuid())
@@ -198,6 +165,21 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
+// ─────────────────────────────────────────
+//  PASSWORD RESET TOKEN (NEW)
+// ─────────────────────────────────────────
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("password_reset_tokens")
+}
 
 model Otp {
   id        String   @id @default(uuid())
@@ -205,7 +187,7 @@ model Otp {
   otp       String
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
-  
+
   @@index([phone])
   @@index([expiresAt])
   @@map("otps")
@@ -233,31 +215,29 @@ model Category {
 // ─────────────────────────────────────────
 
 model Product {
-  id          String   @id @default(uuid())
-  name        String
-  subtitle    String?
-  description String?
-  price       Decimal  @db.Decimal(10, 2)
-  imageUrl    String?  @map("image_url")
-  imageUrls String[]   @map("image_urls")
-  isAvailable Boolean  @default(true) @map("is_available")
-
+  id              String   @id @default(uuid())
+  name            String
+  subtitle        String?
+  description     String?
+  price           Decimal  @db.Decimal(10, 2)
+  imageUrl        String?  @map("image_url")
+  imageUrls       String[] @map("image_urls")
+  isAvailable     Boolean  @default(true) @map("is_available")
   prepTimeMinutes Int?     @map("prep_time_minutes")
   modifierGroups  Json?    @map("modifier_groups")
   isDailySpecial  Boolean  @default(false) @map("is_daily_special")
   specialOrder    Int?     @map("special_order")
   availableFrom   String?  @map("available_from")
   availableUntil  String?  @map("available_until")
-  
-  categoryId  String?  @map("category_id")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
+  categoryId      String?  @map("category_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
 
-  category   Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  variants   ProductVariant[]
-  sizes      ProductSize[]
-  cartItems  CartItem[]
-  orderItems OrderItem[]
+  category      Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  variants      ProductVariant[]
+  sizes         ProductSize[]
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
   wishlistItems WishlistItem[]
   subscriptions Subscription[]
 
@@ -295,22 +275,22 @@ model ProductSize {
 // ─────────────────────────────────────────
 
 model Bean {
-  id          String   @id @default(uuid())
-  name        String
-  origin      String
-  roastLevel  String? 
-  process     String? 
-  tastingNotes String? 
-  weight      String
-  price       Decimal  @db.Decimal(10, 2)
-  imageUrl    String?  @map("image_url")
-  imageUrls   String[] @map("image_urls") 
-  description String?
-  isDark      Boolean  @default(false) @map("is_dark")
-  isAvailable Boolean  @default(true)  @map("is_available")
-  subscriptionEligible Boolean @default(true) @map("subscription_eligible") 
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt      @map("updated_at")
+  id                   String   @id @default(uuid())
+  name                 String
+  origin               String
+  roastLevel           String?
+  process              String?
+  tastingNotes         String?
+  weight               String
+  price                Decimal  @db.Decimal(10, 2)
+  imageUrl             String?  @map("image_url")
+  imageUrls            String[] @map("image_urls")
+  description          String?
+  isDark               Boolean  @default(false) @map("is_dark")
+  isAvailable          Boolean  @default(true) @map("is_available")
+  subscriptionEligible Boolean  @default(true) @map("subscription_eligible")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
 
   grindOptions  BeanGrindOption[]
   purchasePlans BeanPurchasePlan[]
@@ -327,9 +307,9 @@ model BeanGrindOption {
   grind  GrindOption
   beanId String      @map("bean_id")
 
-  bean       Bean        @relation(fields: [beanId], references: [id], onDelete: Cascade)
-  cartItems  CartItem[]
-  orderItems OrderItem[]
+  bean          Bean             @relation(fields: [beanId], references: [id], onDelete: Cascade)
+  cartItems     CartItem[]
+  orderItems    OrderItem[]
   subscriptions Subscription[]
 
   @@unique([beanId, grind])
@@ -377,24 +357,22 @@ model CartItem {
   quantity  Int          @default(1)
   unitPrice Decimal      @db.Decimal(10, 2) @map("unit_price")
   userId    String       @map("user_id")
+  productId String?      @map("product_id")
+  variantId String?      @map("variant_id")
+  sizeId    String?      @map("size_id")
+  beanId    String?      @map("bean_id")
+  grindId   String?      @map("grind_id")
+  planId    String?      @map("plan_id")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
 
-  productId String? @map("product_id")
-  variantId String? @map("variant_id")
-  sizeId    String? @map("size_id")
-  beanId    String? @map("bean_id")
-  grindId   String? @map("grind_id")
-  planId    String? @map("plan_id")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt      @map("updated_at")
-
-  user    User              @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  user    User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
   variant ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
-  size    ProductSize?      @relation(fields: [sizeId],    references: [id], onDelete: SetNull)
-  bean    Bean?             @relation(fields: [beanId],    references: [id], onDelete: SetNull)
-  grind   BeanGrindOption?  @relation(fields: [grindId],   references: [id], onDelete: SetNull)
-  plan    BeanPurchasePlan? @relation(fields: [planId],    references: [id], onDelete: SetNull)
+  size    ProductSize?      @relation(fields: [sizeId], references: [id], onDelete: SetNull)
+  bean    Bean?             @relation(fields: [beanId], references: [id], onDelete: SetNull)
+  grind   BeanGrindOption?  @relation(fields: [grindId], references: [id], onDelete: SetNull)
+  plan    BeanPurchasePlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@map("cart_items")
 }
@@ -404,32 +382,26 @@ model CartItem {
 // ─────────────────────────────────────────
 
 model Order {
-  id             String         @id @default(uuid())
-  status         OrderStatus    @default(pending)
-  deliveryMethod DeliveryMethod @map("delivery_method")
-  total          Decimal        @db.Decimal(10, 2)
-  estimatedTime  String?        @map("estimated_time")
-  userId         String         @map("user_id")
-  confirmedAt    DateTime?
-
-  // Contact snapshot
-  contactName    String  @map("contact_name")
-  contactPhone   String  @map("contact_phone")
-  contactEmail   String  @map("contact_email")
-
-  channel        String?        @map("channel")   
-  orderMode      String?        @map("order_mode")    
-  tableNumber    Int?           @map("table_number")  
-  pickupTime     DateTime?      @map("pickup_time")   
-
-  // Delivery address — inline, only filled for delivery orders
-  addressLine     String? @map("address_line")
-  addressCity     String? @map("address_city")
-  addressProvince String? @map("address_province")
-  addressPostal   String? @map("address_postal")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt      @map("updated_at")
+  id              String         @id @default(uuid())
+  status          OrderStatus    @default(pending)
+  deliveryMethod  DeliveryMethod @map("delivery_method")
+  total           Decimal        @db.Decimal(10, 2)
+  estimatedTime   String?        @map("estimated_time")
+  userId          String         @map("user_id")
+  confirmedAt     DateTime?
+  contactName     String         @map("contact_name")
+  contactPhone    String         @map("contact_phone")
+  contactEmail    String         @map("contact_email")
+  channel         String?        @map("channel")
+  orderMode       String?        @map("order_mode")
+  tableNumber     Int?           @map("table_number")
+  pickupTime      DateTime?      @map("pickup_time")
+  addressLine     String?        @map("address_line")
+  addressCity     String?        @map("address_city")
+  addressProvince String?        @map("address_province")
+  addressPostal   String?        @map("address_postal")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
 
   user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   orderItems OrderItem[]
@@ -443,30 +415,27 @@ model OrderItem {
   quantity  Int
   unitPrice Decimal      @db.Decimal(10, 2) @map("unit_price")
   orderId   String       @map("order_id")
+  productId String?      @map("product_id")
+  variantId String?      @map("variant_id")
+  sizeId    String?      @map("size_id")
+  beanId    String?      @map("bean_id")
+  grindId   String?      @map("grind_id")
+  planId    String?      @map("plan_id")
 
-  productId String? @map("product_id")
-  variantId String? @map("variant_id")
-  sizeId    String? @map("size_id")
-  beanId    String? @map("bean_id")
-  grindId   String? @map("grind_id")
-  planId    String? @map("plan_id")
-
-  order   Order             @relation(fields: [orderId],    references: [id], onDelete: Cascade)
-  product Product?          @relation(fields: [productId],  references: [id], onDelete: SetNull)
-  variant ProductVariant?   @relation(fields: [variantId],  references: [id], onDelete: SetNull)
-  size    ProductSize?      @relation(fields: [sizeId],     references: [id], onDelete: SetNull)
-  bean    Bean?             @relation(fields: [beanId],     references: [id], onDelete: SetNull)
-  grind   BeanGrindOption?  @relation(fields: [grindId],    references: [id], onDelete: SetNull)
-  plan    BeanPurchasePlan? @relation(fields: [planId],     references: [id], onDelete: SetNull)
+  order   Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  variant ProductVariant?   @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  size    ProductSize?      @relation(fields: [sizeId], references: [id], onDelete: SetNull)
+  bean    Bean?             @relation(fields: [beanId], references: [id], onDelete: SetNull)
+  grind   BeanGrindOption?  @relation(fields: [grindId], references: [id], onDelete: SetNull)
+  plan    BeanPurchasePlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
 
   @@map("order_items")
 }
 
-
 // ─────────────────────────────────────────
-//  WishlistItem
+//  WISHLIST & ADDRESS
 // ─────────────────────────────────────────
-
 
 model WishlistItem {
   id        String       @id @default(uuid())
@@ -476,15 +445,14 @@ model WishlistItem {
   beanId    String?      @map("bean_id")
   createdAt DateTime     @default(now()) @map("created_at")
 
-  user    User     @relation(fields: [userId],    references: [id], onDelete: Cascade)
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   product Product? @relation(fields: [productId], references: [id], onDelete: Cascade)
-  bean    Bean?    @relation(fields: [beanId],    references: [id], onDelete: Cascade)
+  bean    Bean?    @relation(fields: [beanId], references: [id], onDelete: Cascade)
 
   @@unique([userId, productId])
   @@unique([userId, beanId])
   @@map("wishlist_items")
 }
-
 
 model Address {
   id         String   @id @default(uuid())
@@ -502,17 +470,16 @@ model Address {
   @@map("addresses")
 }
 
-
 // ─────────────────────────────────────────
-//  LOYALTY SYSTEM
+//  LOYALTY
 // ─────────────────────────────────────────
 
 model LoyaltyPoint {
   id        String   @id @default(uuid())
   points    Int
   userId    String   @map("user_id")
-  source    String   // e.g., "order", "review", "signup", "birthday", "redemption", "admin_adjustment"
-  sourceId  String?  @map("source_id") // order_id, reward_id, or other reference
+  source    String
+  sourceId  String?  @map("source_id")
   createdAt DateTime @default(now()) @map("created_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -551,14 +518,14 @@ model Redemption {
 }
 
 model EarnAction {
-  id          String   @id @default(uuid())
-  title       String
-  pointsEarned Int     @map("points_earned")
-  actionKey   String   @unique @map("action_key") // e.g., "first_order", "review_product", "birthday", "signup"
-  maxPerUser  Int?     @default(1) @map("max_per_user")
-  isActive    Boolean  @default(true) @map("is_active")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id           String   @id @default(uuid())
+  title        String
+  pointsEarned Int      @map("points_earned")
+  actionKey    String   @unique @map("action_key")
+  maxPerUser   Int?     @default(1) @map("max_per_user")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
   userActions UserEarnAction[]
 
@@ -580,50 +547,45 @@ model UserEarnAction {
   @@map("user_earn_actions")
 }
 
-
-
 // ─────────────────────────────────────────
 //  SUBSCRIPTIONS
 // ─────────────────────────────────────────
 
 model Subscription {
-  id               String           @id @default(uuid())
-  userId           String           @map("user_id")
-  productId        String?          @map("product_id")
-  beanId           String?          @map("bean_id")
-  grindOptionId    String?          @map("grind_option_id")
-  deliveryPlan     SubscriptionPlan @map("delivery_plan")
-  nextDeliveryDate DateTime         @map("next_delivery_date")
-  price            Decimal          @db.Decimal(10, 2)
+  id               String             @id @default(uuid())
+  userId           String             @map("user_id")
+  productId        String?            @map("product_id")
+  beanId           String?            @map("bean_id")
+  grindOptionId    String?            @map("grind_option_id")
+  deliveryPlan     SubscriptionPlan   @map("delivery_plan")
+  nextDeliveryDate DateTime           @map("next_delivery_date")
+  price            Decimal            @db.Decimal(10, 2)
   status           SubscriptionStatus @default(active)
-  cancelledAt      DateTime?        @map("cancelled_at")
-  createdAt        DateTime         @default(now()) @map("created_at")
-  updatedAt        DateTime         @updatedAt @map("updated_at")
+  cancelledAt      DateTime?          @map("cancelled_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
 
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product      Product?        @relation(fields: [productId], references: [id], onDelete: SetNull)
-  bean         Bean?           @relation(fields: [beanId], references: [id], onDelete: SetNull)
-  grindOption  BeanGrindOption? @relation(fields: [grindOptionId], references: [id], onDelete: SetNull)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product     Product?         @relation(fields: [productId], references: [id], onDelete: SetNull)
+  bean        Bean?            @relation(fields: [beanId], references: [id], onDelete: SetNull)
+  grindOption BeanGrindOption? @relation(fields: [grindOptionId], references: [id], onDelete: SetNull)
 
   @@map("subscriptions")
 }
-
-
 
 // ─────────────────────────────────────────
 //  CONTACT FORM
 // ─────────────────────────────────────────
 
-
 model ContactSubmission {
-  id        String   @id @default(uuid())
+  id        String        @id @default(uuid())
   name      String
   email     String
   subject   String
   message   String
   status    ContactStatus @default(unread)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt      @map("updated_at")
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
 
   @@index([email])
   @@index([status])
@@ -631,27 +593,23 @@ model ContactSubmission {
   @@map("contact_submissions")
 }
 
-
- // ─────────────────────────────────────────
-//  STAFF MANAGEMENT
+// ─────────────────────────────────────────
+//  STAFF
 // ─────────────────────────────────────────
 
 model Staff {
-  id         String     @id @default(uuid())
-  userId     String     @unique @map("user_id")
-  role       StaffRole  @default(barista)
-  invitedBy  String?    @map("invited_by")
-  isActive   Boolean    @default(true) @map("is_active")
-  joinedAt   DateTime   @default(now()) @map("joined_at")
-  lastActive DateTime?  @map("last_active")
-  createdAt  DateTime   @default(now()) @map("created_at")
-  updatedAt  DateTime   @updatedAt @map("updated_at")
+  id         String    @id @default(uuid())
+  userId     String    @unique @map("user_id")
+  role       StaffRole @default(barista)
+  invitedBy  String?   @map("invited_by")
+  isActive   Boolean   @default(true) @map("is_active")
+  joinedAt   DateTime  @default(now()) @map("joined_at")
+  lastActive DateTime? @map("last_active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  // Relations
-  user     User @relation("staffUser", fields: [userId], references: [id], onDelete: Cascade)
-  inviter User?  @relation("staffInviter", fields: [invitedBy], references: [id])
-
-  // Audit logs
+  user      User            @relation("staffUser", fields: [userId], references: [id], onDelete: Cascade)
+  inviter   User?           @relation("staffInviter", fields: [invitedBy], references: [id])
   auditLogs StaffAuditLog[]
 
   @@map("staff")
@@ -669,7 +627,6 @@ model StaffAuditLog {
   userAgent  String?  @map("user_agent")
   createdAt  DateTime @default(now()) @map("created_at")
 
-  // Relation
   staff Staff @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@index([staffId])
@@ -677,17 +634,15 @@ model StaffAuditLog {
   @@map("staff_audit_logs")
 }
 
-
-
 // ─────────────────────────────────────────
-//  NOTIFICATION SYSTEM
+//  NOTIFICATIONS
 // ─────────────────────────────────────────
 
 model DeviceToken {
   id         String   @id @default(uuid())
   userId     String   @map("user_id")
   token      String   @unique
-  deviceType String   @map("device_type") // ios, android, web
+  deviceType String   @map("device_type")
   deviceName String?  @map("device_name")
   appVersion String?  @map("app_version")
   isActive   Boolean  @default(true)
@@ -703,15 +658,15 @@ model DeviceToken {
 }
 
 model NotificationLog {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  title      String
-  body       String
-  type       String   // order_status, subscription, payment, promotion, system
-  data       Json?    // Additional data (orderId, etc.)
-  isRead     Boolean  @default(false)
-  sentAt     DateTime @default(now()) @map("sent_at")
-  readAt     DateTime? @map("read_at")
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  title       String
+  body        String
+  type        String
+  data        Json?
+  isRead      Boolean   @default(false)
+  sentAt      DateTime  @default(now()) @map("sent_at")
+  readAt      DateTime? @map("read_at")
   deliveredAt DateTime? @map("delivered_at")
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -723,14 +678,14 @@ model NotificationLog {
 }
 
 model EmailLog {
-  id         String   @id @default(uuid())
-  userId     String?  @map("user_id")
-  email      String
-  subject    String
-  type       String   // order_confirmation, order_status, subscription, welcome, password_reset
-  status     String   // sent, failed, bounced
-  error      String?
-  sentAt     DateTime @default(now()) @map("sent_at")
+  id      String   @id @default(uuid())
+  userId  String?  @map("user_id")
+  email   String
+  subject String
+  type    String
+  status  String
+  error   String?
+  sentAt  DateTime @default(now()) @map("sent_at")
 
   @@index([email])
   @@index([type])
